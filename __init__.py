@@ -129,11 +129,21 @@ class AntigravitySubscriptionDirectSDKProfile(ProviderProfile):
         return list(_FALLBACK_MODELS)
 
     def get_model_context_length(self, model: str) -> int | None:
-        """Cap context window for Antigravity CLI at 96,000 tokens to ensure
-        Hermes' context_compressor runs before agy's internal 100k trajectory limit
-        and pubsub channel stall threshold.
+        """Declared context window for Antigravity CLI.
+        
+        Defaults to 200,000 tokens (allowing conversations to comfortably pass
+        140k-160k tokens before auto-compression). Configurable via the
+        ANTIGRAVITY_CONTEXT_LENGTH environment variable.
         """
-        return 96_000
+        env_val = os.environ.get("ANTIGRAVITY_CONTEXT_LENGTH")
+        if env_val:
+            try:
+                val = int(env_val.strip())
+                if val > 0:
+                    return val
+            except ValueError:
+                pass
+        return 200_000
 
     def classify_api_error(
         self,
