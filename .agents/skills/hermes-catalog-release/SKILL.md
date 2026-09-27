@@ -1,27 +1,27 @@
 ---
 name: hermes-catalog-release
-description: Protocol for releasing new versions of the Antigravity Subscription DirectSDK plugin and submitting catalog pin-bump PRs to upstream NousResearch/hermes-agent.
+description: Release protocol and upstream catalog PR workflow for antigravity-subscription-directsdk.
 ---
 
-# Hermes Catalog Release & Upstream PR Protocol
+# Hermes Catalog Release and Upstream PR Protocol
 
-This skill documents the end-to-end workflow for releasing new versions of the `antigravity-subscription-directsdk` plugin and submitting catalog pin-bump PRs to upstream `NousResearch/hermes-agent`.
+Release workflow for `antigravity-subscription-directsdk` and catalog pin-bump PR process for upstream `NousResearch/hermes-agent`.
 
 ---
 
 ## 1. Upstream Catalog Admission Rules
 
 Per `hermes-agent/plugin-catalog/README.md` (Rules 4 and 5):
-- Every catalog entry requires an exact 40-character Git commit SHA pin (`sha:`). Branches and tags are rejected.
-- Updating an entry's pin requires a new PR to `NousResearch/hermes-agent` reviewed by maintainers.
-- SHA bumps must be submitted by the plugin repository owner or a major contributor.
-- Reviewers inspect the commit range being adopted (`vOLD..vNEW`) for security, stability, and capability compliance.
+- Catalog entries require a 40-character Git commit SHA pin (`sha:`). The catalog validator rejects branches and tags.
+- Maintainers must review and merge a PR to update an existing pin.
+- The plugin repository owner or a major contributor must submit the SHA bump.
+- Reviewers inspect the commit range (`vOLD..vNEW`) for security and stability.
 
 ---
 
 ## 2. Release Protocol (Plugin Repository)
 
-Execute these steps in `/root/.hermes/plugins/antigravity-subscription-directsdk`:
+Run these steps in `/root/.hermes/plugins/antigravity-subscription-directsdk`:
 
 ### Step 1: Bump Version in `plugin.yaml`
 Update `version:` in `plugin.yaml`:
@@ -32,7 +32,7 @@ version: X.Y.Z
 ```
 
 ### Step 2: Run the Test Suite
-Ensure all tests pass before committing:
+Confirm tests pass before committing:
 ```bash
 PYTHONPATH=/usr/local/lib/hermes-agent:. pytest
 ```
@@ -43,23 +43,23 @@ Create the release commit on `main`:
 git commit -am "release: vX.Y.Z"
 ```
 
-### Step 4: Push `main` to `origin/main` FIRST
-The GitHub Actions release gate (`.github/workflows/release.yml`) checks:
+### Step 4: Push `main` to `origin/main` Before Tagging
+The release workflow (`.github/workflows/release.yml`) checks:
 `git merge-base --is-ancestor "$TAG" origin/main`
-The release commit must exist on `origin/main` before the tag is pushed, or CI will fail.
+The release commit must exist on `origin/main` before you push the tag, or CI fails.
 ```bash
 git push origin main
 ```
 
 ### Step 5: Tag and Push Tag
-Tag the commit using strict semver (`vX.Y.Z`):
+Tag the commit with semantic versioning (`vX.Y.Z`):
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-### Step 6: Monitor Release Workflow
-Wait for GitHub Actions to validate tests and publish the GitHub release:
+### Step 6: Verify the Release Build
+Wait for GitHub Actions to complete:
 ```bash
 gh run list --repo soyelmismo/hermes-antigravity-subscription -L 3
 gh run watch <run_id> --repo soyelmismo/hermes-antigravity-subscription
@@ -69,7 +69,7 @@ Verify the published release:
 gh release view vX.Y.Z
 ```
 
-### Step 7: Record the 40-Hex Commit SHA
+### Step 7: Record the Commit SHA
 ```bash
 git rev-parse HEAD
 # Example: b7ab470b51a2915e19e4df52bb80cd5973c1b0ca
@@ -79,7 +79,7 @@ git rev-parse HEAD
 
 ## 3. Upstream PR Protocol (`NousResearch/hermes-agent`)
 
-Execute these steps in the local `hermes-agent` clone (`/usr/local/lib/hermes-agent`):
+Run these steps in `/usr/local/lib/hermes-agent`:
 
 ### Step 1: Sync `main` with Upstream
 ```bash
@@ -89,7 +89,7 @@ git checkout main
 git merge --ff-only origin/main
 ```
 
-### Step 2: Create a Dedicated Branch
+### Step 2: Create a Feature Branch
 ```bash
 git checkout -b catalog/bump-antigravity-pin-v<version_slug>
 # Example: catalog/bump-antigravity-pin-v105
@@ -97,18 +97,18 @@ git checkout -b catalog/bump-antigravity-pin-v<version_slug>
 
 ### Step 3: Update Catalog Entry
 Edit `plugin-catalog/antigravity-subscription-directsdk.yaml`:
-- Set `sha:` to the exact 40-character commit SHA recorded in Step 2.7.
+- Set `sha:` to the 40-character commit SHA from Step 2.7.
 - Set `version:` to `"X.Y.Z"`.
-- Preserve all existing descriptions, disclosures, and capabilities blocks.
+- Preserve existing descriptions, disclosures, and capabilities blocks.
 
-### Step 4: Run Catalog & Plugin Validators
-Both validators must pass cleanly:
+### Step 4: Run Validators
+Run both validators:
 ```bash
 python3 scripts/validate_plugin_catalog.py plugin-catalog/antigravity-subscription-directsdk.yaml
-# Must output: OK: 1 file(s) valid
+# Expected: OK: 1 file(s) valid
 
 hermes plugins validate /root/.hermes/plugins/antigravity-subscription-directsdk
-# Must output: Validation passed. (Security scan: safe)
+# Expected: Validation passed. (Security scan: safe)
 ```
 
 ### Step 5: Commit and Push to Fork
@@ -118,7 +118,7 @@ git push -u fork catalog/bump-antigravity-pin-v<version_slug>
 ```
 
 ### Step 6: Submit Upstream PR
-Open the PR against `NousResearch/hermes-agent` `main`:
+Open the PR against `NousResearch/hermes-agent:main`:
 ```bash
 gh pr create --repo NousResearch/hermes-agent \
   --base main \
@@ -129,26 +129,26 @@ gh pr create --repo NousResearch/hermes-agent \
 
 ---
 
-## 4. PR Writing Style Guide (Stop-Slop / Technical Standards)
+## 4. PR Writing Standards
 
-Upstream maintainers review dozens of catalog PRs weekly. Follow these rules strictly:
+Maintainers review catalog PRs in high volume. Apply these standards:
 
 ### Rules:
 1. **Language:** English only.
 2. **Title Format:** `catalog: bump antigravity-subscription-directsdk pin to vX.Y.Z`.
-3. **No AI Clichés or Slop:**
-   - Do NOT use puffery words: "Intelligent", "Smart", "Crucial", "Game-changing", "Seamlessly", "Leverages".
-   - Replace with plain technical terms: "Tool pruning", "Error classification", "Context bound".
-4. **No Filler or Throat-Clearing:**
-   - Cut: "Here is what changed", "In order to...", "It is important to understand".
-   - Start directly with facts, numbers, and mechanisms.
-5. **No Em-Dashes:** Avoid dramatic dashes (`—`). Use colons or standard periods.
-6. **Active Voice & Concrete Data:**
-   - Name the exact files changed (`prompt.py`, `__init__.py`).
-   - Cite exact error signatures, byte counts, and token limits.
-   - Mention measured reductions (e.g. "cuts wire payload from 600 KB to 180 KB").
+3. **No Puffery:**
+   - Avoid buzzwords: "intelligent", "smart", "crucial", "game-changing", "seamlessly", "leverages".
+   - Use plain technical terms: "tool pruning", "error classification", "context bound".
+4. **No Throat-Clearing:**
+   - Cut preamble: "Here is what changed", "In order to", "It is important to note".
+   - Lead with facts and measurements.
+5. **No Em Dashes:** Use colons or periods.
+6. **Active Voice and Concrete Data:**
+   - Name changed files (`prompt.py`, `__init__.py`).
+   - Cite error signatures, byte counts, and token limits.
+   - State measured reductions (e.g. "cuts wire payload from 600 KB to 180 KB").
 
-### Canonical PR Body Template:
+### PR Body Template:
 
 ```markdown
 Follow-up to the catalogued plugin (owner-submitted pin bump, catalog rules 4 and 5).
