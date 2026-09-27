@@ -316,6 +316,53 @@ class AntigravityPluginTests(unittest.TestCase):
         d_prompt2 = _format_delta_prompt(tool_delta)
         self.assertIn("Continue the conversation from the latest tool result.", d_prompt2)
 
+    def test_format_messages_historical_tool_pruning(self):
+        messages = [{"role": "user", "content": "Start session"}]
+        # Create 12 tool results, each 1000 characters
+        for idx in range(12):
+            call_id = f"c_{idx}"
+            messages.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"id": call_id, "function": {"name": "test_tool", "arguments": "{}"}}],
+            })
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": f"output_{idx}_" + ("X" * 1000),
+            })
+        messages.append({"role": "user", "content": "What is the status?"})
+
+        prompt = _format_messages_as_prompt(messages)
+        # Older tools (indices 0 to 3) should be truncated
+        for idx in range(4):
+            self.assertIn(f"Tool Result (c_{idx}):", prompt)
+            self.assertIn("[... tool output truncated:", prompt)
+
+        # Recent tools (the last 8, indices 4 to 11) should remain intact (1000 X's)
+        for idx in range(4, 12):
+            self.assertIn(f"Tool Result (c_{idx}):\noutput_{idx}_" + ("X" * 1000), prompt)
+
+    def test_format_messages_single_large_tool_capped(self):
+        messages = [
+            {"role": "user", "content": "Run big dump"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "c_big", "function": {"name": "big", "arguments": "{}"}}]},
+            {"role": "tool", "tool_call_id": "c_big", "content": "START" + ("Y" * 25000) + "END"},
+            {"role": "user", "content": "Analyze"},
+        ]
+        prompt = _format_messages_as_prompt(messages)
+        self.assertIn("[... large tool output truncated: 25008 chars ...]", prompt)
+        self.assertIn("START", prompt)
+        self.assertIn("END", prompt)
+
+    def test_format_delta_prompt_large_tool_capped(self):
+        from client import _format_delta_prompt
+        tool_delta = [{"role": "tool", "tool_call_id": "t_big", "content": "HEAD" + ("Z" * 25000) + "TAIL"}]
+        d_prompt = _format_delta_prompt(tool_delta)
+        self.assertIn("[... large tool output truncated: 25008 chars ...]", d_prompt)
+        self.assertIn("HEAD", d_prompt)
+        self.assertIn("TAIL", d_prompt)
+
     def test_mock_stream_tool_call_suppresses_trailing_hallucination(self):
         # TemporaryDirectory (not /tmp): on Windows "/tmp" resolves to a
         # drive-rooted \tmp with no guaranteed write access, and an
@@ -598,6 +645,47 @@ class AntigravityPluginTests(unittest.TestCase):
         self.assertIn("gemini-3.1-pro", models)
         self.assertNotIn("gemini-3.8-flash-high", models)
         self.assertNotIn("gemini-3.8-flash-medium", models)
+
+    def test_profile_get_model_context_length(self):
+        profile = get_provider_profile("antigravity-subscription-directsdk")
+        self.assertEqual(profile.get_model_context_length("gemini-3.8-flash"), 96_000)
+        self.assertEqual(profile.get_model_context_length("gemini-3.1-pro"), 96_000)
+        self.assertEqual(profile.get_model_context_length("claude-sonnet-4-6"), 96_000)
+
+    def test_profile_classify_api_error(self):
+        profile = get_provider_profile("antigravity-subscription-directsdk")
+        hook = profile.classify_api_error
+        self.assertIsNotNone(hook)
+        self.assertTrue(callable(hook))
+
+        # Test subscriber fell behind / stalled
+        verdict = hook(RuntimeError("subscriber fell behind updates, stalled for 5s"))
+        self.assertEqual(verdict, {"reason": "context_overflow", "retryable": True, "should_compress": True})
+
+        # Test empty result SUCCESS
+        verdict2 = hook(RuntimeError("Antigravity execution failed: empty result (status='SUCCESS')"))
+        self.assertEqual(verdict2, {"reason": "context_overflow", "retryable": True, "should_compress": True})
+
+        # Test context canceled
+        verdict3 = hook(RuntimeError("stream input cancelled: context canceled"))
+        self.assertEqual(verdict3, {"reason": "context_overflow", "retryable": True, "should_compress": True})
+
+        # Test unrelated error returns None
+        verdict4 = hook(RuntimeError("Invalid API key or unauthorized"))
+        self.assertIsNone(verdict4)
+
+    def test_hermes_error_classifier_integration(self):
+        try:
+            from agent.error_classifier import classify_api_error, FailoverReason
+        except ImportError:
+            self.skipTest("Hermes agent not installed in test environment")
+
+        err = RuntimeError("Antigravity model error: subscriber fell behind updates, stalled for 5s")
+        classified = classify_api_error(err, provider="antigravity-subscription-directsdk")
+        self.assertEqual(classified.reason, FailoverReason.context_overflow)
+        self.assertTrue(classified.retryable)
+        self.assertTrue(classified.should_compress)
+
     def test_security_default_args_omit_dangerous_permissions(self):
         # TemporaryDirectory (not /tmp): on Windows "/tmp" resolves to a
         # drive-rooted \tmp with no guaranteed write access, and an

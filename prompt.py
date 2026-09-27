@@ -94,15 +94,41 @@ def _format_messages_as_prompt(
     if system_parts:
         sections.append("### SYSTEM INSTRUCTIONS (HERMES AGENT):\n" + "\n\n".join(f"System:\n{p}" for p in system_parts))
 
+    _HISTORICAL_TOOL_RETENTION_COUNT = 8
+    _HISTORICAL_TOOL_MAX_CHARS = 300
+    _TOOL_MAX_CHARS_CAP = 20000
+
     transcript: list[str] = []
     prior_messages = history_messages[:-1] if last_role == "user" and len(history_messages) > 1 else history_messages
 
-    for message in prior_messages:
+    tool_indices = [
+        i for i, msg in enumerate(prior_messages)
+        if str(msg.get("role") or "").strip().lower() == "tool"
+    ]
+    recent_tool_cutoff = (
+        set(tool_indices[-_HISTORICAL_TOOL_RETENTION_COUNT:])
+        if len(tool_indices) > _HISTORICAL_TOOL_RETENTION_COUNT
+        else set(tool_indices)
+    )
+
+    for i, message in enumerate(prior_messages):
         role = str(message.get("role") or "unknown").strip().lower()
         rendered_content = _render_message_content(message.get("content"))
 
         if role == "tool":
             tool_id = str(message.get("tool_call_id") or message.get("name") or "tool").strip()
+            if i not in recent_tool_cutoff and len(rendered_content) > _HISTORICAL_TOOL_MAX_CHARS:
+                rendered_content = (
+                    rendered_content[:200]
+                    + f"\n[... tool output truncated: {len(rendered_content)} chars ...]\n"
+                    + rendered_content[-100:]
+                )
+            elif len(rendered_content) > _TOOL_MAX_CHARS_CAP:
+                rendered_content = (
+                    rendered_content[:12000]
+                    + f"\n[... large tool output truncated: {len(rendered_content)} chars ...]\n"
+                    + rendered_content[-3000:]
+                )
             transcript.append(f"Tool Result ({tool_id}):\n{rendered_content}")
             continue
 
@@ -184,6 +210,12 @@ def _format_delta_prompt(new_messages: Sequence[dict[str, Any]]) -> str:
         rendered_content = _render_message_content(msg.get("content"))
         if role == "tool":
             tool_id = str(msg.get("tool_call_id") or msg.get("name") or "tool").strip()
+            if len(rendered_content) > 20000:
+                rendered_content = (
+                    rendered_content[:12000]
+                    + f"\n[... large tool output truncated: {len(rendered_content)} chars ...]\n"
+                    + rendered_content[-3000:]
+                )
             parts.append(f"Tool Result ({tool_id}):\n{rendered_content}")
             continue
         if role == "assistant":

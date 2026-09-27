@@ -128,6 +128,65 @@ class AntigravitySubscriptionDirectSDKProfile(ProviderProfile):
 
         return list(_FALLBACK_MODELS)
 
+    def get_model_context_length(self, model: str) -> int | None:
+        """Cap context window for Antigravity CLI at 96,000 tokens to ensure
+        Hermes' context_compressor runs before agy's internal 100k trajectory limit
+        and pubsub channel stall threshold.
+        """
+        return 96_000
+
+    def classify_api_error(
+        self,
+        error: Exception,
+        *,
+        status_code: int | None = None,
+        error_code: str | None = None,
+        message: str = "",
+        body: Any = None,
+        model: str | None = None,
+    ) -> dict[str, Any] | None:
+        return _classify_antigravity_error(
+            error,
+            status_code=status_code,
+            error_code=error_code,
+            message=message,
+            body=body,
+            model=model,
+        )
+
+
+def _classify_antigravity_error(
+    error: Exception,
+    *,
+    status_code: int | None = None,
+    error_code: str | None = None,
+    message: str = "",
+    body: Any = None,
+    model: str | None = None,
+) -> dict[str, Any] | None:
+    """Classify agy CLI specific runtime errors so Hermes' smart failover /
+    recovery pipeline triggers auto-compression and retry instead of failing.
+    """
+    err_str = f"{error} {message}".lower()
+    if any(
+        pattern in err_str
+        for pattern in (
+            "subscriber fell behind updates",
+            "stalled for 5s",
+            "empty result (status='success')",
+            "empty result (status=\"success\")",
+            "context canceled",
+            "max_trajectory_tokens",
+            "max trajectory tokens",
+        )
+    ):
+        return {
+            "reason": "context_overflow",
+            "retryable": True,
+            "should_compress": True,
+        }
+    return None
+
 
 antigravity_profile = AntigravitySubscriptionDirectSDKProfile(
     name="antigravity-subscription-directsdk",
@@ -144,6 +203,7 @@ antigravity_profile = AntigravitySubscriptionDirectSDKProfile(
     default_aux_model="gemini-3.8-flash",
     fallback_models=_FALLBACK_MODELS,
     supports_vision=True,
+    classify_api_error=_classify_antigravity_error,
 )
 
 register_provider(antigravity_profile)
