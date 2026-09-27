@@ -15,23 +15,27 @@ This plugin lets Hermes use Gemini and Claude models through your existing Antig
 - **Token streaming**: Reads stdout chunks from `agy --output-format stream-json` and yields standard completion deltas.
 - **Tool call routing**: The model emits `<tool_call>` tags in text. The plugin parses these into OpenAI function call deltas, so Hermes executes tools on the host instead of `agy`.
 - **Tool execution guard**: `agy` registers local system tools by default. This plugin runs `agy` in headless mode without permissions skip flags. If `agy` attempts to execute an internal tool step, the stream closes and terminates the child process.
-- **Thinking effort mapping**: Maps Hermes reasoning effort settings (`low`, `medium`, `high`) directly to backend model variants (`gemini-3.8-flash-low`, `gemini-3.8-flash-high`).
+- **Thinking effort mapping**: Maps Hermes reasoning effort settings (`low`, `medium`, `high`) to backend model variants (`gemini-3.8-flash-low`, `gemini-3.8-flash-high`).
 - **Subagent concurrency**: Each completion turn runs in its own process group (`start_new_session=True`). Multiple Hermes subagents can request completions concurrently without shared state.
 - **Filesystem isolation**: Subprocesses run in an isolated, private temporary working directory per client and slash commands are disabled. Local `GEMINI.md` and `AGENTS.md` project files are not read.
+- **Tool output pruning**: Old tool results (diffs, directory trees, test output) dominate wire payload in long sessions. The prompt builder keeps the last 8 tool results intact and caps older tool outputs at 300 characters. A 20k character safety limit with head/tail preservation guards individual tool calls. In a 336-message session, this cut wire payload from 600 KB to 180 KB (70% reduction).
+- **Error classification and auto-compression**: `classify_api_error` detects `agy` PubSub stalls (`subscriber fell behind updates, stalled for 5s`), `context canceled`, and empty SUCCESS status. Returns `context_overflow` with `should_compress: True`, so Hermes compresses the session and retries instead of failing.
 
 ---
 
 ## Models
 
-| Model | Suffix | Context | Supported Efforts |
-| :--- | :--- | :--- | :--- |
-| `gemini-3.8-flash` | `-low`, `-medium`, `-high` | 1M tokens | `low`, `medium`, `high` |
-| `gemini-3.7-flash` | `-low`, `-medium`, `-high` | 1M tokens | `low`, `medium`, `high` |
-| `gemini-3.6-flash` | `-low`, `-medium`, `-high` | 1M tokens | `low`, `medium`, `high` |
-| `gemini-3.1-pro` | `-low`, `-high` | 2M tokens | `low`, `high` |
-| `claude-sonnet-4-6` | None | 200k tokens | Default |
-| `claude-opus-4-6-thinking` | None | 200k tokens | Extended thinking |
-| `gpt-oss-120b-medium` | None | 128k tokens | Default |
+| Model | Suffix | LLM Context | Plugin Declared | Supported Efforts |
+| :--- | :--- | :--- | :--- | :--- |
+| `gemini-3.8-flash` | `-low`, `-medium`, `-high` | 1M tokens | 200k tokens | `low`, `medium`, `high` |
+| `gemini-3.7-flash` | `-low`, `-medium`, `-high` | 1M tokens | 200k tokens | `low`, `medium`, `high` |
+| `gemini-3.6-flash` | `-low`, `-medium`, `-high` | 1M tokens | 200k tokens | `low`, `medium`, `high` |
+| `gemini-3.1-pro` | `-low`, `-high` | 2M tokens | 200k tokens | `low`, `high` |
+| `claude-sonnet-4-6` | None | 200k tokens | 200k tokens | Default |
+| `claude-opus-4-6-thinking` | None | 200k tokens | 200k tokens | Extended thinking |
+| `gpt-oss-120b-medium` | None | 128k tokens | 200k tokens | Default |
+
+> **LLM Context vs Plugin Declared**: The LLM context column shows the model's native token window. The plugin declares 200,000 tokens to Hermes (configurable via `ANTIGRAVITY_CONTEXT_LENGTH`). This gap exists because `agy` runs an internal Go language server (`jetski/cortex`) that re-serializes the cumulative trajectory on each token via a gRPC channel with a 5-second drain deadline. Prompts exceeding 500 KB cause channel backpressure that trips the deadline and drops the stream. The 200k declared limit triggers Hermes auto-compression at 80% (160k tokens), keeping wire payloads within `agy` throughput limits.
 
 ---
 
@@ -75,7 +79,7 @@ This plugin lets Hermes use Gemini and Claude models through your existing Antig
    hermes --version
    ```
 
-> **Optional — Linux keyring detection.**
+> **Optional: Linux keyring detection.**
 > On Linux with a D-Bus session, `agy` keeps its session in the freedesktop
 > Secret Service instead of a token file (credentials `service`/`gemini` +
 > `username`/`antigravity`, the go-keyring convention). Detection uses
@@ -87,8 +91,7 @@ This plugin lets Hermes use Gemini and Claude models through your existing Antig
 > the plugin never receives the stored secret. Installing `secret-tool` is not
 > strictly neutral: the CLI path answers on the exact attribute pair, while the
 > scripted path additionally matches a credential whose go-keyring label embeds
-> "antigravity" — so hosts without the CLI get the slightly more permissive
-> verdict. Headless systems without a D-Bus session keep using the token-file
+> "antigravity". Headless systems without a D-Bus session keep using the token-file
 > path, so nothing extra is required there.
 > ```bash
 > command -v secret-tool   # optional: faster than the python3 fallback
@@ -107,9 +110,22 @@ This plugin lets Hermes use Gemini and Claude models through your existing Antig
 
 ---
 
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `ANTIGRAVITY_CONTEXT_LENGTH` | `200000` | Override the declared context window (tokens). Hermes triggers auto-compression at 80% of this value. |
+| `ANTIGRAVITY_COMMAND` | `agy` | Path to the `agy` binary. Also checks `AGY_CLI_PATH` and `ANTIGRAVITY_CLI_PATH`. |
+| `ANTIGRAVITY_ARGS` | (none) | Extra arguments to pass to the `agy` subprocess. |
+| `ANTIGRAVITY_CONFIG_DIR` | (none) | Override the config directory, bypassing keyring and token-file detection. |
+
+---
+
 ## Installation
 
-Install directly through the Hermes plugin manager:
+Install through the Hermes plugin manager:
 
 ```bash
 hermes plugins install https://github.com/soyelmismo/hermes-antigravity-subscription
@@ -163,7 +179,7 @@ agent:
 Run the test suite:
 
 ```bash
-PYTHONPATH=/usr/local/lib/hermes-agent:. python3 tests/test_antigravity_plugin.py
+PYTHONPATH=/usr/local/lib/hermes-agent:. pytest
 ```
 
 ---
