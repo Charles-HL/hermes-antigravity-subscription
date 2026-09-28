@@ -627,14 +627,21 @@ class AntigravityPluginTests(unittest.TestCase):
         # Suffix override: model had -high but effort was set to low
         self.assertEqual(client._resolve_model_and_effort("gemini-3.8-flash-high", "low"), ("gemini-3.8-flash-low", "low"))
 
-        # Non-gemini model
-        self.assertEqual(client._resolve_model_and_effort("claude-sonnet-4-6", "high"), ("claude-sonnet-4-6", "high"))
+        # Claude models: agy rejects --effort for them, so no effort is reported
+        # and the client must never append the flag (it would kill the worker).
+        # Issue #15.
+        self.assertEqual(client._resolve_model_and_effort("claude-sonnet-4-6", "high"), ("claude-sonnet-4-6", None))
+        self.assertEqual(client._resolve_model_and_effort("claude-opus-4-6-thinking", "medium"), ("claude-opus-4-6-thinking", None))
 
     def test_profile_supported_reasoning_efforts(self):
         profile = get_provider_profile("antigravity-subscription-directsdk")
         self.assertEqual(profile.supported_reasoning_efforts("gemini-3.8-flash"), ("low", "medium", "high"))
         self.assertEqual(profile.supported_reasoning_efforts("gemini-3.1-pro"), ("low", "high"))
         self.assertEqual(profile.supported_reasoning_efforts("gpt-oss-120b-medium"), ())
+        # agy rejects --effort for Claude; offering levels would break every turn.
+        # Issue #15.
+        self.assertEqual(profile.supported_reasoning_efforts("claude-sonnet-4-6"), ())
+        self.assertEqual(profile.supported_reasoning_efforts("claude-opus-4-6-thinking"), ())
 
     def test_fetch_models_clean_base_names(self):
         profile = get_provider_profile("antigravity-subscription-directsdk")

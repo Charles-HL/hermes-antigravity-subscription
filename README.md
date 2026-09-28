@@ -31,11 +31,27 @@ This plugin lets Hermes use Gemini and Claude models through your existing Antig
 | `gemini-3.7-flash` | `-low`, `-medium`, `-high` | 1M tokens | 200k tokens | `low`, `medium`, `high` |
 | `gemini-3.6-flash` | `-low`, `-medium`, `-high` | 1M tokens | 200k tokens | `low`, `medium`, `high` |
 | `gemini-3.1-pro` | `-low`, `-high` | 2M tokens | 200k tokens | `low`, `high` |
-| `claude-sonnet-4-6` | None | 200k tokens | 200k tokens | Default |
-| `claude-opus-4-6-thinking` | None | 200k tokens | 200k tokens | Extended thinking |
-| `gpt-oss-120b-medium` | None | 128k tokens | 200k tokens | Default |
+| `claude-sonnet-4-6` | None | 200k tokens | 200k tokens | None (agy rejects `--effort`) |
+| `claude-opus-4-6-thinking` | None | 200k tokens | 200k tokens | None (agy rejects `--effort`) |
+| `gpt-oss-120b-medium` | None | 128k tokens | 200k tokens | None |
 
 > **LLM Context vs Plugin Declared**: The LLM context column shows the model's native token window. The plugin declares 200,000 tokens to Hermes (configurable via `ANTIGRAVITY_CONTEXT_LENGTH`). This gap exists because `agy` runs an internal Go language server (`jetski/cortex`) that re-serializes the cumulative trajectory on each token via a gRPC channel with a 5-second drain deadline. Prompts exceeding 500 KB cause channel backpressure that trips the deadline and drops the stream. The 200k declared limit triggers Hermes auto-compression at 80% (160k tokens), keeping wire payloads within `agy` throughput limits.
+
+### Model Compatibility
+
+`agy` embeds its own system prompt ("you are Antigravity, you have `run_command`, `view_file`, ...") before the plugin's preamble. Some models obey `agy`'s prompt over the plugin's `<tool_call>` protocol and invoke native tools, which headless mode soft-denies. The plugin detects this and terminates the stream, but the turn is lost.
+
+| Model | `<tool_call>` Protocol | Notes |
+| :--- | :--- | :--- |
+| `gemini-3.8-flash` | Follows | Tested with full toolset (~40 tools) |
+| `gemini-3.7-flash` | Follows | Tested with full toolset |
+| `gemini-3.6-flash` | Ignores | Goes native even with a single tool schema |
+| `gemini-3.1-pro` | Follows | Tested with full toolset |
+| `claude-opus-4-6-thinking` | Follows | Tested with full toolset |
+| `claude-sonnet-4-6` | Ignores with large toolsets | Works with 1 tool, flips to native with ~40 tools |
+| `gpt-oss-120b-medium` | Follows | Tested with full toolset |
+
+Models that ignore the protocol attempt `agy`'s native `RunCommand`/`WriteToFile` steps. The plugin neutralizes these (stream watcher kills the process), but every tool-using turn fails. This is an upstream `agy` limitation: the persona prompt is embedded in the closed binary with no configuration surface to suppress it.
 
 ---
 

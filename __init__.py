@@ -47,7 +47,11 @@ class AntigravitySubscriptionDirectSDKProfile(ProviderProfile):
         if "gemini" in m or "flash" in m or "pro" in m:
             return ("low", "medium", "high")
         if "claude" in m:
-            return ("low", "medium", "high")
+            # agy rejects --effort for Claude models. Offering effort levels
+            # here makes Hermes send the flag; the worker dies with a
+            # BrokenPipeError and Hermes silently falls back to OpenRouter.
+            # (Issue #15)
+            return ()
         if "gpt" in m:
             return ()
         return ("low", "medium", "high")

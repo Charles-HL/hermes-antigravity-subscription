@@ -14,6 +14,14 @@ _FALLBACK_MODELS = [
     "gpt-oss-120b-medium",
 ]
 
+# agy rejects --effort for these model families:
+#   error: invalid model selection (--model "claude-sonnet-4-6" --effort "medium"):
+#          --effort is not supported for model "claude-sonnet-4-6"
+# The worker exits at startup. Hermes sees a BrokenPipeError, retries 3x, then
+# silently falls back to OpenRouter (real spend). Claude models must be selected
+# by name alone, never with --effort. (Issue #15)
+_NO_EFFORT_MODEL_PREFIXES = ("claude",)
+
 _MODEL_ALIASES = {
     "default": "gemini-3.8-flash",
     "flash": "gemini-3.8-flash",
@@ -49,6 +57,11 @@ def resolve_model_and_effort(
     """Map user/hermes model request to concrete CLI model ID and effort level."""
     m = str(model or "gemini-3.8-flash").strip()
     m = _MODEL_ALIASES.get(m.lower(), m)
+
+    # Models that cannot take --effort at all: resolve to the bare model ID
+    # and report no effort, so client.py never appends the flag. (Issue #15)
+    if m.lower().startswith(_NO_EFFORT_MODEL_PREFIXES):
+        return m, None
 
     # Check if the model already contains an explicit effort suffix
     base_model = m
