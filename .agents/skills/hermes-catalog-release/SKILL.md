@@ -157,6 +157,9 @@ Maintainers review catalog PRs in high volume. Apply these standards:
    - Name changed files (`prompt.py`, `__init__.py`).
    - Cite error signatures, byte counts, and token limits.
    - State measured reductions (e.g. "cuts wire payload from 600 KB to 180 KB").
+7. **Fully Qualified Issue and PR References:**
+   - Never use bare issue numbers such as `#15` or `(#16)` in PR titles, bodies, or commit summaries. In `NousResearch/hermes-agent`, GitHub auto-links bare numbers to unrelated upstream issues.
+   - Always qualify references with the plugin repository: `soyelmismo/hermes-antigravity-subscription#15` or full issue URLs.
 
 ### PR Body Template:
 

@@ -57,3 +57,4 @@ Before cutting a release or updating the catalog pin, follow the protocol in [`.
    - Avoid throat-clearing: "Here is what changed", "In order to".
    - No em dashes. Use colons or periods.
    - Active voice. Cite file paths, token limits, byte counts, and error signatures.
+   - Qualified issue links: never use bare `#15` or `(#16)`. Use `soyelmismo/hermes-antigravity-subscription#15` so GitHub does not link to unrelated upstream issues.
