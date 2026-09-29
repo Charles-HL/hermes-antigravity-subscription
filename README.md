@@ -48,7 +48,7 @@ This plugin lets Hermes use Gemini and Claude models through your existing Antig
 | `gemini-3.6-flash` | Ignores | Goes native even with a single tool schema |
 | `gemini-3.1-pro` | Follows | Tested with full toolset |
 | `claude-opus-4-6-thinking` | Follows | Tested with full toolset |
-| `claude-sonnet-4-6` | Ignores with large toolsets | Works with 1 tool, flips to native with ~40 tools |
+| `claude-sonnet-4-6` | Partial | Works with moderate toolsets (tested up to 10 tools); refuses or flips to native with large toolsets (~40 tools) |
 | `gpt-oss-120b-medium` | Follows | Tested with full toolset |
 
 Models that ignore the protocol attempt `agy`'s native `RunCommand`/`WriteToFile` steps. The plugin neutralizes these (stream watcher kills the process), but every tool-using turn fails. This is an upstream `agy` limitation: the persona prompt is embedded in the closed binary with no configuration surface to suppress it.
@@ -156,6 +156,8 @@ git clone https://github.com/soyelmismo/hermes-antigravity-subscription.git \
 
 hermes plugins enable antigravity-subscription-directsdk
 ```
+
+> **Directory naming tip**: Hermes Agent discovers plugins by scanning directories in `~/.hermes/plugins/` alphabetically. If you keep backup copies (such as `antigravity-subscription-directsdk.backup`), place them outside `~/.hermes/plugins/` so a later-sorting directory does not override the active plugin.
 
 ---
 
