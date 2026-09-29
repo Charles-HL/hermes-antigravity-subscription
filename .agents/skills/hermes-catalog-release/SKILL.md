@@ -23,27 +23,35 @@ Per `hermes-agent/plugin-catalog/README.md` (Rules 4 and 5):
 
 Run these steps in `/root/.hermes/plugins/antigravity-subscription-directsdk`:
 
-### Step 1: Bump Version in `plugin.yaml`
+### Step 1: Update Documentation (`README.md`)
+Review code changes since the previous release (`git log vOLD..HEAD`).
+Update `README.md` to document:
+- New features, flags, or configuration options.
+- Model compatibility matrix updates.
+- Workarounds, known limits, or directory naming considerations.
+
+### Step 2: Bump Version and Description in `plugin.yaml`
 Update `version:` in `plugin.yaml`:
 ```yaml
 name: antigravity-subscription-directsdk
 manifest_version: 2
 version: X.Y.Z
 ```
+Check if `description:` needs adjustment for new core functionality.
 
-### Step 2: Run the Test Suite
+### Step 3: Run the Test Suite
 Confirm tests pass before committing:
 ```bash
 PYTHONPATH=/usr/local/lib/hermes-agent:. pytest
 ```
 
-### Step 3: Commit the Release
+### Step 4: Commit the Release
 Create the release commit on `main`:
 ```bash
 git commit -am "release: vX.Y.Z"
 ```
 
-### Step 4: Push `main` to `origin/main` Before Tagging
+### Step 5: Push `main` to `origin/main` Before Tagging
 The release workflow (`.github/workflows/release.yml`) checks:
 `git merge-base --is-ancestor "$TAG" origin/main`
 The release commit must exist on `origin/main` before you push the tag, or CI fails.
@@ -51,14 +59,14 @@ The release commit must exist on `origin/main` before you push the tag, or CI fa
 git push origin main
 ```
 
-### Step 5: Tag and Push Tag
+### Step 6: Tag and Push Tag
 Tag the commit with semantic versioning (`vX.Y.Z`):
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-### Step 6: Verify the Release Build
+### Step 7: Verify the Release Build
 Wait for GitHub Actions to complete:
 ```bash
 gh run list --repo soyelmismo/hermes-antigravity-subscription -L 3
@@ -69,10 +77,10 @@ Verify the published release:
 gh release view vX.Y.Z
 ```
 
-### Step 7: Record the Commit SHA
+### Step 8: Record the Commit SHA
 ```bash
 git rev-parse HEAD
-# Example: b7ab470b51a2915e19e4df52bb80cd5973c1b0ca
+# Example: 3d691dadfdd515083237337c4a9747389a18ca4a
 ```
 
 ---
@@ -92,14 +100,16 @@ git merge --ff-only origin/main
 ### Step 2: Create a Feature Branch
 ```bash
 git checkout -b catalog/bump-antigravity-pin-v<version_slug>
-# Example: catalog/bump-antigravity-pin-v105
+# Example: catalog/bump-antigravity-pin-v106
 ```
 
 ### Step 3: Update Catalog Entry
 Edit `plugin-catalog/antigravity-subscription-directsdk.yaml`:
-- Set `sha:` to the 40-character commit SHA from Step 2.7.
+- Set `sha:` to the 40-character commit SHA from Step 2.8.
 - Set `version:` to `"X.Y.Z"`.
-- Preserve existing descriptions, disclosures, and capabilities blocks.
+- Update `description:` to describe new features, bug fixes, and version-specific disclosures for `vX.Y.Z`.
+- Preserve existing security disclosures (keyring access, isolated HOME symlinks, token handling).
+- Verify `capabilities:` matches actual plugin registrations.
 
 ### Step 4: Run Validators
 Run both validators:

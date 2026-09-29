@@ -37,7 +37,8 @@ Before cutting a release or updating the catalog pin, follow the protocol in [`.
 
 ### Summary Checklist
 1. **Order of Operations**:
-   - Update `version:` in `plugin.yaml`.
+   - Update `README.md` to document new features, configuration, model compatibility, or caveats.
+   - Update `version:` and `description:` in `plugin.yaml`.
    - Run tests (`pytest`).
    - Commit: `git commit -am "release: vX.Y.Z"`.
    - Push `main` to `origin/main` before creating the tag. CI verifies that the tag commit exists on `origin/main`.
@@ -45,7 +46,7 @@ Before cutting a release or updating the catalog pin, follow the protocol in [`.
    - Verify the published release with `gh release view vX.Y.Z`.
 2. **Upstream Catalog PR**:
    - In `/usr/local/lib/hermes-agent`, branch from `main`: `catalog/bump-antigravity-pin-v<slug>`.
-   - Update `plugin-catalog/antigravity-subscription-directsdk.yaml` with the 40-character commit SHA and version.
+   - Update `plugin-catalog/antigravity-subscription-directsdk.yaml` with the 40-character commit SHA, version, and updated description reflecting new features and disclosures.
    - Validate catalog: `python3 scripts/validate_plugin_catalog.py plugin-catalog/antigravity-subscription-directsdk.yaml`.
    - Validate plugin: `hermes plugins validate /root/.hermes/plugins/antigravity-subscription-directsdk`.
    - Push to fork and open a PR against `NousResearch/hermes-agent:main`.
