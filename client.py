@@ -37,6 +37,7 @@ try:
         resolve_agy_command,
         resolve_real_token_path,
         setup_isolated_home,
+        start_stderr_drainer,
         terminate_process,
     )
     from .prompt import (
@@ -66,6 +67,7 @@ except ImportError:
         resolve_agy_command,
         resolve_real_token_path,
         setup_isolated_home,
+        start_stderr_drainer,
         terminate_process,
     )
     from prompt import (
@@ -478,6 +480,7 @@ class AntigravityClient:
                 env=self._child_env(),
                 **_own_process_group(),
             )
+            start_stderr_drainer(proc)
             self._worker_proc = proc
             self._worker_model = model
             self._worker_effort = effort
@@ -519,6 +522,7 @@ class AntigravityClient:
             env=self._child_env(),
             **_own_process_group(),
         )
+        start_stderr_drainer(proc)
 
         try:
             if proc.stdin:

@@ -481,6 +481,20 @@ class AntigravityStream(Iterator[Any]):
             return "no result event, process still alive"
         return f"no result event, process exited with return code {process_exit}"
 
+    def _get_stderr_tail(self) -> str:
+        """Retrieve bounded stderr tail from the drainer, or fall back to direct read."""
+        drainer = getattr(self.proc, "_stderr_drainer", None)
+        if drainer is not None and hasattr(drainer, "get_tail"):
+            return drainer.get_tail(timeout=1.0)
+        stream = getattr(self.proc, "stderr", None)
+        if stream is not None and hasattr(stream, "read") and callable(stream.read):
+            try:
+                out = stream.read()
+                return out if isinstance(out, str) else ""
+            except Exception:
+                return ""
+        return ""
+
     def _stream_generator(self) -> Iterator[Any]:
         deadline = time.monotonic() + self.timeout
         text_buffer = ""
@@ -697,7 +711,7 @@ class AntigravityStream(Iterator[Any]):
                 except subprocess.TimeoutExpired:
                     self.client._terminate_process(self.proc)
 
-                stderr_out = self.proc.stderr.read() if self.proc.stderr else ""
+                stderr_out = self._get_stderr_tail()
                 # Raw poll(), NOT `poll() or 0`: a process that is still
                 # alive (None) must stay None. The old coercion fabricated
                 # "exited 0" for it, and the empty-result message then named

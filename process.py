@@ -8,6 +8,8 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +77,85 @@ def terminate_process(proc: subprocess.Popen) -> None:
         proc.wait(timeout=2)
     except Exception:
         _kill_process_tree(proc)
+
+
+_DEFAULT_STDERR_LIMIT = 64 * 1024  # 64 KiB of text
+
+
+class StderrDrainer:
+    """Continuously drains a subprocess stderr in a daemon thread, retaining a bounded tail."""
+
+    def __init__(self, proc: subprocess.Popen, max_chars: int = _DEFAULT_STDERR_LIMIT) -> None:
+        self._proc = proc
+        self._max_chars = max(0, int(max_chars))
+        self._lock = threading.Lock()
+        self._buffer: deque[str] = deque()
+        self._buffered_chars = 0
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> StderrDrainer:
+        stream = getattr(self._proc, "stderr", None)
+        if stream is None or not hasattr(stream, "read") or not callable(stream.read):
+            return self
+
+        thread = threading.Thread(
+            target=self._drain_loop,
+            name="agy-stderr-drainer",
+            daemon=True,
+        )
+        self._thread = thread
+        thread.start()
+        return self
+
+    def _drain_loop(self) -> None:
+        stream = getattr(self._proc, "stderr", None)
+        if stream is None:
+            return
+        while True:
+            try:
+                chunk = stream.read(4096)
+            except Exception:
+                break
+            if not chunk or not isinstance(chunk, str):
+                break
+
+            with self._lock:
+                if len(chunk) >= self._max_chars:
+                    self._buffer.clear()
+                    self._buffer.append(chunk[-self._max_chars:])
+                    self._buffered_chars = self._max_chars
+                else:
+                    self._buffer.append(chunk)
+                    self._buffered_chars += len(chunk)
+                    while self._buffer and (self._buffered_chars - len(self._buffer[0])) >= self._max_chars:
+                        popped = self._buffer.popleft()
+                        self._buffered_chars -= len(popped)
+
+    def get_tail(self, timeout: float = 1.0) -> str:
+        """Wait briefly for the drainer thread to complete and return the accumulated tail."""
+        if (
+            self._thread is not None
+            and self._thread.is_alive()
+            and threading.current_thread() != self._thread
+            and getattr(self._proc, "poll", lambda: None)() is not None
+        ):
+            self._thread.join(timeout=max(0.0, float(timeout)))
+
+        with self._lock:
+            text = "".join(self._buffer)
+            if len(text) > self._max_chars:
+                return text[-self._max_chars:]
+            return text
+
+
+def start_stderr_drainer(proc: subprocess.Popen, max_chars: int = _DEFAULT_STDERR_LIMIT) -> StderrDrainer:
+    """Create and start a daemon StderrDrainer. Attached to proc only if a thread starts."""
+    drainer = StderrDrainer(proc, max_chars=max_chars)
+    drainer.start()
+    if drainer._thread is not None:
+        with contextlib.suppress(Exception):
+            proc._stderr_drainer = drainer
+    return drainer
 
 
 def resolve_agy_command() -> str:
