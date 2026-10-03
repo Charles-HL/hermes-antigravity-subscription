@@ -181,6 +181,7 @@ def _format_messages_as_prompt(
             f"### LATEST USER REQUEST TO ANSWER:\nUser:\n{user_text}\n\n"
             "INSTRUCTION: Respond directly and specifically to the LATEST USER REQUEST above. "
             "Do NOT repeat previous architectural summaries, code reviews, or overview boilerplate unless explicitly asked."
+            " If the LATEST USER REQUEST comments on, questions, or gives feedback about prior work rather than asking to continue it, address THAT message and do NOT silently continue the earlier task. If the user's intent is genuinely ambiguous, ask ONE short clarifying question instead of proceeding."
         )
     else:
         sections.append("Continue the conversation from the latest message.")

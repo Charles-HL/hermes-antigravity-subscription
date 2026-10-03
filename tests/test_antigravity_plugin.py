@@ -250,6 +250,10 @@ class AntigravityPluginTests(unittest.TestCase):
         self.assertIn("Assistant:\nHi there!", prompt)
         self.assertIn("User:\nWhat is the weather?", prompt)
         self.assertIn("get_weather", prompt)
+        self.assertIn(
+            "If the LATEST USER REQUEST comments on, questions, or gives feedback about prior work rather than asking to continue it, address THAT message and do NOT silently continue the earlier task. If the user's intent is genuinely ambiguous, ask ONE short clarifying question instead of proceeding.",
+            prompt,
+        )
 
     def test_format_messages_with_tool_call_and_result(self):
         messages = [
@@ -293,6 +297,10 @@ class AntigravityPluginTests(unittest.TestCase):
         # Verify latest user request is highlighted at tail
         self.assertIn("### LATEST USER REQUEST TO ANSWER:\nUser:\nWhy is this not following thread?", prompt)
         self.assertIn("Do NOT repeat previous architectural summaries", prompt)
+        self.assertIn(
+            "If the LATEST USER REQUEST comments on, questions, or gives feedback about prior work rather than asking to continue it, address THAT message and do NOT silently continue the earlier task. If the user's intent is genuinely ambiguous, ask ONE short clarifying question instead of proceeding.",
+            prompt,
+        )
 
     def test_format_messages_latest_tool_results(self):
         messages = [
