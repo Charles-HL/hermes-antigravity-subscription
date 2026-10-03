@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -176,6 +177,7 @@ class StderrDrainTests(unittest.TestCase):
         """Multibyte UTF-8 characters split across read boundaries are not corrupted into U+FFFD."""
         script = (
             "import sys\n"
+            "sys.stderr.reconfigure(encoding='utf-8')\n"
             "pattern = 'ñ€😀'\n"
             "for _ in range(3000):\n"
             "    sys.stderr.write(pattern)\n"
@@ -184,6 +186,8 @@ class StderrDrainTests(unittest.TestCase):
             "sys.stdout.write('OK\\n')\n"
             "sys.stdout.flush()\n"
         )
+        child_env = os.environ.copy()
+        child_env["PYTHONIOENCODING"] = "utf-8"
         proc = subprocess.Popen(
             [sys.executable, "-c", script],
             stdin=subprocess.PIPE,
@@ -193,6 +197,7 @@ class StderrDrainTests(unittest.TestCase):
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            env=child_env,
         )
         drainer = start_stderr_drainer(proc, max_chars=65536)
         try:
@@ -256,6 +261,10 @@ class StderrDrainTests(unittest.TestCase):
         )
         self.assertEqual(stream._get_stderr_tail(), "direct fallback stderr\n")
 
+    @unittest.skipIf(
+        os.name == "nt",
+        "mock agy script with shebang is not executable on Windows",
+    )
     def test_worker_turn_with_large_stderr_does_not_hang(self) -> None:
         """Persistent worker emitting >=4 MiB to stderr during a turn completes without hanging."""
         # Pipe capacity on Linux is 16 pages: 64 KiB with 4 KiB pages (x86_64),
