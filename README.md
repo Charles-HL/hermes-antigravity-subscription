@@ -143,6 +143,7 @@ Models that ignore the protocol attempt `agy`'s native `RunCommand`/`WriteToFile
 | `ANTIGRAVITY_COMMAND` | `agy` | Path to the `agy` binary. Also checks `AGY_CLI_PATH` and `ANTIGRAVITY_CLI_PATH`. |
 | `ANTIGRAVITY_ARGS` | (none) | Extra arguments to pass to the `agy` subprocess. |
 | `ANTIGRAVITY_CONFIG_DIR` | (none) | Override the config directory, bypassing keyring and token-file detection. |
+| `ANTIGRAVITY_DEBUG_PROMPT_DIR` | (none) | Directory to dump outgoing prompts sent to `agy` for offline diagnosis. |
 
 ---
 

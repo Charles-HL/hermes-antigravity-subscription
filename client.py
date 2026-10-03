@@ -51,6 +51,7 @@ try:
         _render_message_content,
     )
     from .stream import AntigravityStream, collect_stream_completion
+    from .debug import dump_prompt_debug
 except ImportError:
     from models import (
         _FALLBACK_MODELS,
@@ -81,6 +82,7 @@ except ImportError:
         _render_message_content,
     )
     from stream import AntigravityStream, collect_stream_completion
+    from debug import dump_prompt_debug
 
 logger = logging.getLogger(__name__)
 
@@ -503,6 +505,12 @@ class AntigravityClient:
         prompt_text = _format_messages_as_prompt(
             messages, model=model, tools=tools, tool_choice=tool_choice
         )
+        dump_prompt_debug(
+            prompt=prompt_text,
+            branch="oneshot",
+            model=model,
+            messages=messages,
+        )
         cmd_args = [self._command, *self._args]
         if model:
             cmd_args.extend(["--model", model])
@@ -587,12 +595,24 @@ class AntigravityClient:
                 if is_continuation:
                     delta_msgs = messages_list[len(self._worker_history):]
                     prompt_payload = _format_delta_prompt(delta_msgs)
+                    dump_prompt_debug(
+                        prompt=prompt_payload,
+                        branch="delta",
+                        model=resolved_model,
+                        messages=messages_list,
+                    )
                 else:
                     if self._worker_history:
                         self._terminate_worker()
                         proc = self._get_or_spawn_worker(resolved_model, effort)
                     prompt_payload = _format_messages_as_prompt(
                         messages_list, model=resolved_model, tools=tools, tool_choice=tool_choice
+                    )
+                    dump_prompt_debug(
+                        prompt=prompt_payload,
+                        branch="full",
+                        model=resolved_model,
+                        messages=messages_list,
                     )
 
                 event_msg = {"event": "user", "message": {"content": prompt_payload}}
@@ -604,6 +624,12 @@ class AntigravityClient:
                     proc = self._get_or_spawn_worker(resolved_model, effort)
                     prompt_payload = _format_messages_as_prompt(
                         messages_list, model=resolved_model, tools=tools, tool_choice=tool_choice
+                    )
+                    dump_prompt_debug(
+                        prompt=prompt_payload,
+                        branch="retry",
+                        model=resolved_model,
+                        messages=messages_list,
                     )
                     event_msg = {"event": "user", "message": {"content": prompt_payload}}
                     proc.stdin.write(json.dumps(event_msg) + "\n")

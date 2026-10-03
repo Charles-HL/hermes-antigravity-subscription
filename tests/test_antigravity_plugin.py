@@ -317,7 +317,10 @@ class AntigravityPluginTests(unittest.TestCase):
         # Delta ending with user
         user_delta = [{"role": "user", "content": "new user query"}]
         d_prompt = _format_delta_prompt(user_delta)
-        self.assertIn("Respond directly and specifically to the latest user request above.", d_prompt)
+        self.assertIn("### LATEST USER REQUEST TO ANSWER:\nUser:\nnew user query", d_prompt)
+        self.assertIn("Respond directly and specifically to the LATEST USER REQUEST above.", d_prompt)
+        self.assertIn("do NOT silently continue the earlier task", d_prompt)
+        self.assertEqual(d_prompt.count("new user query"), 1)
 
         # Delta ending with tool
         tool_delta = [{"role": "tool", "tool_call_id": "t1", "content": "output"}]
