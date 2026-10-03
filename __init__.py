@@ -237,4 +237,3 @@ antigravity_profile = AntigravitySubscriptionDirectSDKProfile(
 )
 
 register_provider(antigravity_profile)
-
