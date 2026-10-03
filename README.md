@@ -114,6 +114,13 @@ Models that ignore the protocol attempt `agy`'s native `RunCommand`/`WriteToFile
 > ```
 > Install it with `libsecret-tools` (Debian/Ubuntu) or `libsecret` (Fedora/Arch).
 
+> **SSH session variables.**
+> `agy` switches to file-based token storage when it detects `SSH_CONNECTION`,
+> `SSH_CLIENT`, or `SSH_TTY`. When no token file exists (credential lives in the
+> OS keyring), the plugin strips these variables from the child environment so
+> `agy` uses keyring authentication instead of failing. `SSH_AUTH_SOCK` is
+> preserved. When a token file exists, the environment is unchanged.
+
 > **macOS keychain.** On macOS `agy` keeps its session in the login keychain
 > (a generic password with service `gemini` and account `antigravity`).
 > Detection runs `/usr/bin/security find-generic-password` without `-g` or
@@ -196,7 +203,7 @@ The provider profile implements `fetch_account_usage()`, exposing subscription q
 
 Note: Custom plugin tools and slash commands are not available for `kind: model-provider` plugins because Hermes core skips calling `register(ctx)` for model providers (`hermes_cli/plugins_discovery.py:286`, `hermes_cli/plugin_validate.py:253-258`). All quota visibility is provided through the native `fetch_account_usage()` interface.
 
-Quota queries execute `agy -p "/usage" --output-format json` under an isolated HOME environment without consuming any model tokens or inference turns. Results are cached thread-safely for 60 seconds.
+Quota queries execute `agy -p "/usage" --output-format json` under an isolated HOME environment without consuming any model tokens or inference turns. Results are cached thread-safely for 60 seconds. Refreshes use single-flight execution so concurrent callers share a single subprocess. An unforced query failure serves the stale cache.
 
 ---
 
