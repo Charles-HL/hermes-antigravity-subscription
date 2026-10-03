@@ -457,7 +457,6 @@ class AsyncStreamSemanticsTests(_PinnedSeamsMixin, unittest.TestCase):
     def _assert_executor_threads_gone(
         self,
         executor: Any = None,
-        baseline: int | None = None,
         timeout: float = 1.0,
     ) -> None:
         """No agy-stream thread may outlive the stream's end.

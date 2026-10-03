@@ -366,10 +366,15 @@ class AntigravityStream(Iterator[Any]):
         """
         self.close()
 
-    def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
+    def _close_blocking(self) -> None:
+        """Blocking close body: process termination, lock release, executor retirement.
+
+        Extracted so ``close()`` can dispatch this to a daemon thread when
+        called from a thread with a running asyncio event loop, avoiding a
+        ~2 s block on ``proc.wait(timeout=2)`` inside ``terminate_process``.
+        The operation order is identical to the pre-extraction ``close()``
+        body; every invariant documented on the individual steps still holds.
+        """
         if self.is_worker:
             # Terminate the worker only if it is still OURS. The interrupted
             # path runs at an arbitrary later time on an arbitrary thread --
@@ -391,6 +396,41 @@ class AntigravityStream(Iterator[Any]):
         # _retire_executor); a second call is a harmless no-op because an
         # already-shut-down executor accepts shutdown() again.
         self._retire_executor()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        # When called from a thread that owns a running asyncio event loop
+        # (e.g. Hermes' _aggregate_chat_stream_async finally block), the
+        # blocking cleanup -- proc.terminate() + proc.wait(timeout=2) inside
+        # terminate_process, plus the client RLock acquisition in
+        # _terminate_worker -- would stall the loop for up to ~2 s. Detect
+        # that situation and dispatch the work to a dedicated daemon thread
+        # so close() returns immediately. Outside an event loop (the common
+        # sync path, GC finalizers, explicit close() from user code) the
+        # cleanup runs inline, preserving the original synchronous contract.
+        #
+        # The daemon thread is NOT the stream's private async executor and
+        # NOT the loop's default executor: the private executor may already
+        # be shut down (or its single thread may be blocked in readline),
+        # and the default executor must not be occupied for ~2 s (the same
+        # starvation __anext__ avoids). A fresh daemon thread costs one
+        # stack allocation and exits as soon as cleanup finishes; daemon
+        # status ensures it cannot keep the process alive past interpreter
+        # shutdown.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop: synchronous close, same as before.
+            self._close_blocking()
+            return
+        # Running loop detected: defer blocking work.
+        threading.Thread(
+            target=self._close_blocking,
+            name="agy-stream-close",
+            daemon=True,
+        ).start()
 
     def _make_chunk(
         self,
