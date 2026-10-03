@@ -599,6 +599,17 @@ def build_child_env(isolated_home: Path | str) -> dict[str, str]:
     env["USERPROFILE"] = home_str
     if "HOMEPATH" in env:
         env["HOMEPATH"] = home_str
+
+    # agy 1.2.16 detects SSH sessions via SSH_CONNECTION, SSH_CLIENT, or SSH_TTY
+    # and forces file-based token storage ("Using file-based token storage because
+    # SSH session detected"). When credentials live in the OS keyring and no real
+    # token file exists, strip these variables so agy falls back to keyring auth.
+    # Preserve SSH_AUTH_SOCK so agy tools can still use ssh-agent for git over SSH.
+    # See soyelmismo/hermes-antigravity-subscription#18.
+    if os.name != "nt" and resolve_real_token_path() is None:
+        for var in ("SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"):
+            env.pop(var, None)
+
     return env
 
 
