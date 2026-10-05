@@ -103,12 +103,16 @@ def parse_catalog(text: str) -> dict[str, tuple[str, ...]]:
     }
 
 
-def load_catalog(timeout: float = 15.0) -> dict[str, tuple[str, ...]]:
+def load_catalog(
+    timeout: float = 15.0, *, only_if_stale: bool = False
+) -> dict[str, tuple[str, ...]]:
     """Run `agy models`, cache the parsed result, and return it.
 
     Returns an empty dict when agy is missing, slow, or prints nothing usable.
     Failures are cached briefly so an absent agy does not cost a process
-    spawn per request.
+    spawn per request. With `only_if_stale`, a thread that waited on the lock
+    reuses the result the previous holder just cached instead of spawning agy
+    again.
     """
     global _catalog_cache
     try:
@@ -117,6 +121,10 @@ def load_catalog(timeout: float = 15.0) -> dict[str, tuple[str, ...]]:
         from process import resolve_agy_command
 
     with _catalog_lock:
+        if only_if_stale:
+            fresh = _cached_catalog()
+            if fresh is not None:
+                return fresh
         try:
             res = subprocess.run(
                 [resolve_agy_command(), "models"],
@@ -144,7 +152,9 @@ def model_efforts(base_model: str, *, refresh: bool = True) -> tuple[str, ...] |
     """Efforts agy accepts for `base_model`; () means bare name, None means unknown.
 
     Order: a fresh `agy models` result, then the built-in table, then (when
-    `refresh` is true) a new `agy models` call.
+    `refresh` is true) a new `agy models` call. While a cached result is
+    fresh, a model it does not list is not looked up again until the cache
+    expires, so an unknown name costs no process spawn per request.
     """
     cached = _cached_catalog()
     if cached is not None and base_model in cached:
@@ -152,7 +162,7 @@ def model_efforts(base_model: str, *, refresh: bool = True) -> tuple[str, ...] |
     if base_model in _KNOWN_EFFORTS:
         return _KNOWN_EFFORTS[base_model]
     if refresh and cached is None:
-        return load_catalog().get(base_model)
+        return load_catalog(only_if_stale=True).get(base_model)
     return None
 
 

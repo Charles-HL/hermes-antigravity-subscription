@@ -744,6 +744,8 @@ class AntigravityPluginTests(unittest.TestCase):
         with patch("models._catalog_cache", None), \
                 patch("models.load_catalog", return_value=live) as load:
             self.assertEqual(models.model_efforts("claude-next-9"), ("low", "high"))
+            # load_catalog is mocked, so it leaves the cache empty: refresh=False
+            # finds neither a cache nor a built-in entry.
             self.assertEqual(models.model_efforts("claude-next-9", refresh=False), None)
             load.assert_called_once()
 
@@ -756,6 +758,29 @@ class AntigravityPluginTests(unittest.TestCase):
             self.assertIsNone(models.model_efforts("mystery-model"))
             self.assertIsNone(models.model_efforts("another-mystery"))
         self.assertEqual(run.call_count, 1)
+
+    def test_concurrent_lookups_spawn_agy_once(self):
+        import threading
+        import models
+
+        def slow_run(*args, **kwargs):
+            time.sleep(0.2)
+            return SimpleNamespace(stdout="mystery-model-low\nmystery-model-high\n")
+
+        results = []
+        with patch("models._catalog_cache", None), \
+                patch("process.resolve_agy_command", return_value="agy"), \
+                patch("models.subprocess.run", side_effect=slow_run) as run:
+            threads = [
+                threading.Thread(target=lambda: results.append(models.model_efforts("mystery-model")))
+                for _ in range(4)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(results, [("low", "high")] * 4)
 
     def test_aliases_point_at_known_models(self):
         import models
